@@ -18,6 +18,15 @@ locals {
   broker_jmx_hostname = "localhost"
   broker_jmx_port = 9101
   broker_jmx_endpoint = "${local.broker_jmx_hostname}:${local.broker_jmx_port}"
+
+  schema_registry_hostname = "schema-registry"
+  schema_registry_port = 8081
+  schema_registry_endpoint = "${local.schema_registry_hostname}:${local.schema_registry_port}"
+
+  rest_proxy_hostname = "rest-proxy"
+  rest_proxy_port = 8082
+  rest_proxy_endpoint = "${local.rest_proxy_hostname}:${local.rest_proxy_port}"
+
 }
 
 # zookeeper
@@ -70,3 +79,47 @@ resource "docker_container" "broker" {
       "KAFKA_JMX_HOSTNAME=${local.broker_internal_hostname}"
   ]
 }
+
+# schema-registry
+
+resource "docker_container" "schema-registry" {
+  image = "confluentinc/cp-schema-registry:${local.confluent_version}"
+  name  = "${local.schema_registry_hostname}"
+  hostname = "${local.schema_registry_hostname}"
+  depends_on = [
+    docker_container.broker
+  ]
+  ports { 
+    internal = local.schema_registry_port
+    external = local.schema_registry_port
+  }
+  env = [
+      "SCHEMA_REGISTRY_HOST_NAME=${local.schema_registry_hostname}",
+      "SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS='${local.broker_internal_endpoint}'",
+      "SCHEMA_REGISTRY_LISTENERS=http://0.0.0.0:${local.schema_registry_port}"
+  ]
+}
+
+# rest-proxy 
+
+resource "docker_container" "zookeeper" {
+  image = "onfluentinc/cp-kafka-rest:${local.confluent_version}"
+  name  = "${local.zookeeper_hostname}"
+  hostname = "${local.zookeeper_hostname}"
+   depends_on = [
+    docker_container.broker,
+    docker_container.schema-registry
+  ]
+  ports { 
+    internal = local.rest_proxy_port
+    external = local.rest_proxy_port
+  }
+  env = [
+      "KAFKA_REST_HOST_NAME: rest-proxy",
+      "KAFKA_REST_BOOTSTRAP_SERVERS: '${local.broker_internal_endpoint}'",
+      "KAFKA_REST_LISTENERS: 'http://0.0.0.0:${local.rest_proxy_port}'",
+      "KAFKA_REST_SCHEMA_REGISTRY_URL: 'http://${local.schema_registry_endpoint}'"
+  ]
+}
+
+#
