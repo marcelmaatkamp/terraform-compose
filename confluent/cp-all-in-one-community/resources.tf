@@ -85,7 +85,7 @@ resource "docker_container" "broker" {
   }
   env = [
     "KAFKA_BROKER_ID=1",
-    "KAFKA_ZOOKEEPER_CONNECT='${local.zookeeper_endpoint}'",
+    "KAFKA_ZOOKEEPER_CONNECT=${local.zookeeper_endpoint}",
     "KAFKA_LISTENER_SECURITY_PROTOCOL_MAP=PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT",
     "KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://${local.broker_internal_endpoint},PLAINTEXT_HOST://${local.broker_external_endpoint}",
     "KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR=1",
@@ -115,7 +115,7 @@ resource "docker_container" "schema-registry" {
   }
   env = [
     "SCHEMA_REGISTRY_HOST_NAME=${local.schema_registry_hostname}",
-    "SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS='${local.broker_internal_endpoint}'",
+    "SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS=${local.broker_internal_endpoint}",
     "SCHEMA_REGISTRY_LISTENERS=http://0.0.0.0:${local.schema_registry_port}"
   ]
   networks_advanced {
@@ -126,7 +126,7 @@ resource "docker_container" "schema-registry" {
 # rest-proxy 
 
 resource "docker_container" "rest-proxy" {
-  image    = "onfluentinc/cp-kafka-rest:${local.confluent_version}"
+  image    = "confluentinc/cp-kafka-rest:${local.confluent_version}"
   name     = local.rest_proxy_hostname
   hostname = local.rest_proxy_hostname
   depends_on = [
@@ -139,9 +139,9 @@ resource "docker_container" "rest-proxy" {
   }
   env = [
     "KAFKA_REST_HOST_NAME=rest-proxy",
-    "KAFKA_REST_BOOTSTRAP_SERVERS='${local.broker_internal_endpoint}'",
-    "KAFKA_REST_LISTENERS='http://0.0.0.0:${local.rest_proxy_port}'",
-    "KAFKA_REST_SCHEMA_REGISTRY_URL='http://${local.schema_registry_endpoint}'"
+    "KAFKA_REST_BOOTSTRAP_SERVERS=${local.broker_internal_endpoint}",
+    "KAFKA_REST_LISTENERS=http://0.0.0.0:${local.rest_proxy_port}",
+    "KAFKA_REST_SCHEMA_REGISTRY_URL=http://${local.schema_registry_endpoint}"
   ]
   networks_advanced {
     name = "kafka"
@@ -163,7 +163,7 @@ resource "docker_container" "connect" {
     external = local.connect_port
   }
   env = [
-    "CONNECT_BOOTSTRAP_SERVERS='${local.broker_internal_endpoint}'",
+    "CONNECT_BOOTSTRAP_SERVERS=${local.broker_internal_endpoint}",
     "CONNECT_REST_ADVERTISED_HOST_NAME=${local.connect_hostname}",
     "CONNECT_GROUP_ID=compose-connect-group",
     "CONNECT_CONFIG_STORAGE_TOPIC=docker-connect-configs",
@@ -232,8 +232,8 @@ resource "docker_container" "kafka-ui" {
     docker_container.ksqldb-server
   ]
   ports {
-    internal = local.ksql_server_port
-    external = local.ksql_server_port
+    internal = local.kafka_ui_port
+    external = local.kafka_ui_port
   }
   env = [
     "KAFKA_CLUSTERS_0_NAME=local",
