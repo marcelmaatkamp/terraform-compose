@@ -223,12 +223,13 @@ resource "docker_container" "ksqldb-server" {
 
 resource "docker_container" "kafka-ui" {
   image    = "provectuslabs/kafka-ui:latest"
-  name     = local.ksql_server_hostname
-  hostname = local.ksql_server_hostname
+  name     = local.kafka_ui_hostname
+  hostname = local.kafka_ui_hostname
   depends_on = [
     docker_container.broker,
     docker_container.schema-registry,
-    docker_container.connect
+    docker_container.connect,
+    docker_container.ksqldb-server
   ]
   ports {
     internal = local.ksql_server_port
