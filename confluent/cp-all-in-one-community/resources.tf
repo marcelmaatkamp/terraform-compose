@@ -27,6 +27,20 @@ locals {
   rest_proxy_port     = 8082
   rest_proxy_endpoint = "${local.rest_proxy_hostname}:${local.rest_proxy_port}"
 
+  ksql_server_hostname = "ksql-server"
+  ksql_server_port     = 8088
+  ksql_server_endpoint = "${local.ksql_server_hostname}:${local.ksql_server_port}"
+
+  connect_hostname = "connect"
+  connect_port     = 8083
+  connect_endpoint = "${local.connect_hostname}:${local.connect_port}"
+
+  kafka_ui_hostname = "kafka-ui"
+  kafka_ui_port     = 8080
+}
+
+resource "docker_network" "kafka" {
+  name = "kafka"
 }
 
 # zookeeper
@@ -43,6 +57,9 @@ resource "docker_container" "zookeeper" {
     "ZOOKEEPER_CLIENT_PORT=${local.zookeeper_port}",
     "ZOOKEEPER_TICK_TIME=2000"
   ]
+  networks_advanced {
+    name = "kafka"
+  }
 }
 
 # broker
@@ -78,6 +95,9 @@ resource "docker_container" "broker" {
     "KAFKA_JMX_PORT=${local.broker_jmx_port}",
     "KAFKA_JMX_HOSTNAME=${local.broker_internal_hostname}"
   ]
+  networks_advanced {
+    name = "kafka"
+  }
 }
 
 # schema-registry
@@ -98,6 +118,9 @@ resource "docker_container" "schema-registry" {
     "SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS='${local.broker_internal_endpoint}'",
     "SCHEMA_REGISTRY_LISTENERS=http://0.0.0.0:${local.schema_registry_port}"
   ]
+  networks_advanced {
+    name = "kafka"
+  }
 }
 
 # rest-proxy 
@@ -115,10 +138,113 @@ resource "docker_container" "rest-proxy" {
     external = local.rest_proxy_port
   }
   env = [
-    "KAFKA_REST_HOST_NAME: rest-proxy",
-    "KAFKA_REST_BOOTSTRAP_SERVERS: '${local.broker_internal_endpoint}'",
-    "KAFKA_REST_LISTENERS: 'http://0.0.0.0:${local.rest_proxy_port}'",
-    "KAFKA_REST_SCHEMA_REGISTRY_URL: 'http://${local.schema_registry_endpoint}'"
+    "KAFKA_REST_HOST_NAME=rest-proxy",
+    "KAFKA_REST_BOOTSTRAP_SERVERS='${local.broker_internal_endpoint}'",
+    "KAFKA_REST_LISTENERS='http://0.0.0.0:${local.rest_proxy_port}'",
+    "KAFKA_REST_SCHEMA_REGISTRY_URL='http://${local.schema_registry_endpoint}'"
   ]
+  networks_advanced {
+    name = "kafka"
+  }
 }
 
+# connect
+
+resource "docker_container" "connect" {
+  image    = "cnfldemos/kafka-connect-datagen:0.5.0-6.2.0"
+  name     = local.connect_hostname
+  hostname = local.connect_hostname
+  depends_on = [
+    docker_container.broker,
+    docker_container.schema-registry
+  ]
+  ports {
+    internal = local.connect_port
+    external = local.connect_port
+  }
+  env = [
+    "CONNECT_BOOTSTRAP_SERVERS='${local.broker_internal_endpoint}'",
+    "CONNECT_REST_ADVERTISED_HOST_NAME=${local.connect_hostname}",
+    "CONNECT_GROUP_ID=compose-connect-group",
+    "CONNECT_CONFIG_STORAGE_TOPIC=docker-connect-configs",
+    "CONNECT_CONFIG_STORAGE_REPLICATION_FACTOR=1",
+    "CONNECT_OFFSET_FLUSH_INTERVAL_MS=10000",
+    "CONNECT_OFFSET_STORAGE_TOPIC=docker-connect-offsets",
+    "CONNECT_OFFSET_STORAGE_REPLICATION_FACTOR=1",
+    "CONNECT_STATUS_STORAGE_TOPIC=docker-connect-status",
+    "CONNECT_STATUS_STORAGE_REPLICATION_FACTOR=1",
+    "CONNECT_KEY_CONVERTER=org.apache.kafka.connect.storage.StringConverter",
+    "CONNECT_VALUE_CONVERTER=io.confluent.connect.avro.AvroConverter",
+    "CONNECT_VALUE_CONVERTER_SCHEMA_REGISTRY_URL=http://${local.schema_registry_endpoint}",
+    "CONNECT_PLUGIN_PATH='/usr/share/java,/usr/share/confluent-hub-components'",
+    "CONNECT_LOG4J_LOGGERS=org.apache.zookeeper=ERROR,org.I0Itec.zkclient=ERROR,org.reflections=ERROR",
+  ]
+  networks_advanced {
+    name = "kafka"
+  }
+}
+
+# ksql-server
+
+resource "docker_container" "ksqldb-server" {
+  image    = "confluentinc/cp-ksqldb-server:7.0.1"
+  name     = local.ksql_server_hostname
+  hostname = local.ksql_server_hostname
+  depends_on = [
+    docker_container.broker,
+    docker_container.schema-registry
+  ]
+  ports {
+    internal = local.ksql_server_port
+    external = local.ksql_server_port
+  }
+  env = [
+    "KSQL_CONFIG_DIR=/etc/ksql",
+    "KSQL_BOOTSTRAP_SERVERS=${local.broker_internal_endpoint}",
+    "KSQL_HOST_NAME=${local.ksql_server_hostname}",
+    "KSQL_LISTENERS=http://0.0.0.0:${local.ksql_server_port}",
+    "KSQL_CACHE_MAX_BYTES_BUFFERING=0",
+    "KSQL_KSQL_SCHEMA_REGISTRY_URL=http://${local.schema_registry_endpoint}",
+    "KSQL_PRODUCER_INTERCEPTOR_CLASSES=io.confluent.monitoring.clients.interceptor.MonitoringProducerInterceptor",
+    "KSQL_CONSUMER_INTERCEPTOR_CLASSES=io.confluent.monitoring.clients.interceptor.MonitoringConsumerInterceptor",
+    "KSQL_KSQL_CONNECT_URL=http://${local.connect_endpoint}",
+    "KSQL_KSQL_LOGGING_PROCESSING_TOPIC_REPLICATION_FACTOR=1",
+    "KSQL_KSQL_LOGGING_PROCESSING_TOPIC_AUTO_CREATE=true",
+    "KSQL_KSQL_LOGGING_PROCESSING_STREAM_AUTO_CREATE=true"
+  ]
+  networks_advanced {
+    name = "kafka"
+  }
+}
+
+# kafka-ui
+#  https://github.com/provectus/kafka-ui/tree/master/documentation/compose
+#  https://github.com/provectus/kafka-ui/issues/1782
+
+resource "docker_container" "kafka-ui" {
+  image    = "provectuslabs/kafka-ui:latest"
+  name     = local.ksql_server_hostname
+  hostname = local.ksql_server_hostname
+  depends_on = [
+    docker_container.broker,
+    docker_container.schema-registry,
+    docker_container.connect
+  ]
+  ports {
+    internal = local.ksql_server_port
+    external = local.ksql_server_port
+  }
+  env = [
+    "KAFKA_CLUSTERS_0_NAME=local",
+    "KAFKA_CLUSTERS_0_ZOOKEEPER=${local.zookeeper_endpoint}",
+    "KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS=${local.broker_internal_endpoint}",
+    "KAFKA_CLUSTERS_0_JMXPORT=${local.broker_jmx_port}",
+    "KAFKA_CLUSTERS_0_SCHEMAREGISTRY=http://${local.schema_registry_endpoint}",
+    "KAFKA_CLUSTERS_0_KSQLDBSERVER=http://${local.ksql_server_endpoint}",
+    "KAFKA_CLUSTERS_0_KAFKACONNECT_0_NAME=connect-0",
+    "KAFKA_CLUSTERS_0_KAFKACONNECT_0_ADDRESS=http://${local.connect_endpoint}"
+  ]
+  networks_advanced {
+    name = "kafka"
+  }
+}
