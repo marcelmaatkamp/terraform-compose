@@ -102,7 +102,7 @@ resource "docker_container" "schema-registry" {
 
 # rest-proxy 
 
-resource "docker_container" "zookeeper" {
+resource "docker_container" "rest-proxy" {
   image = "onfluentinc/cp-kafka-rest:${local.confluent_version}"
   name  = "${local.zookeeper_hostname}"
   hostname = "${local.zookeeper_hostname}"
