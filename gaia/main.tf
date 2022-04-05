@@ -1,20 +1,7 @@
-locals { 
-  ngrok_name = "ngrok"
-  ngrok_port = 4040
-  ngrok_endpoint = "${local.ngrok_name}:${local.ngrok_port}"
-
-  mongodb_name = "mongodb"
-  mongodb_port = 27017
-  mongodb_endpoint = "${local.mongodb_name}:${local.mongodb_port}"
-  mongodb_version = "4.4"
-
-  gaia_name = "gaia"
-  gaia_port = 8080
-  gaia_endpoint = "${local.gaia_name}:${local.gaia_port}"
-  gaia_api_password = "123456"
-  gaia_version = "v2.2.0"
-
-  runner_name = "runner"
+locals {
+  ngrok_endpoint   = "${var.ngrok_name}:${var.ngrok_port}"
+  mongodb_endpoint = "${var.mongodb_name}:${var.mongodb_port}"
+  gaia_endpoint    = "${var.gaia_name}:${var.gaia_port}"
 }
 
 resource "docker_network" "gaia" {
@@ -22,12 +9,12 @@ resource "docker_network" "gaia" {
 }
 
 resource "docker_container" "ngrok" {
-  image    = "wernight/ngrok:latest"
-  name     = local.ngrok_name
-  hostname = local.ngrok_name
+  image    = var.ngrok_image
+  name     = var.ngrok_name
+  hostname = var.ngrok_name
   ports {
-    internal = local.ngrok_port
-    external = local.ngrok_port
+    internal = var.ngrok_port
+    external = var.ngrok_port
   }
   env = [
     "NGROK_PROTOCOL=http",
@@ -39,12 +26,12 @@ resource "docker_container" "ngrok" {
 }
 
 resource "docker_container" "mongodb" {
-  image    = "mongo:${local.mongodb_version}"
-  name     = local.mongodb_name
-  hostname = local.mongodb_name
+  image    = "mongo:${var.mongodb_version}"
+  name     = var.mongodb_name
+  hostname = var.mongodb_name
   ports {
-    internal = local.mongodb_port
-    external = local.mongodb_port
+    internal = var.mongodb_port
+    external = var.mongodb_port
   }
   env = [
 
@@ -55,20 +42,20 @@ resource "docker_container" "mongodb" {
 }
 
 resource "docker_container" "gaia" {
-  image    = "gaiaapp/gaia:${local.gaia_version}"
-  name     = local.gaia_name
-  hostname = local.gaia_name
+  image    = "gaiaapp/gaia:${var.gaia_version}"
+  name     = var.gaia_name
+  hostname = var.gaia_name
   depends_on = [
     docker_container.ngrok
   ]
   ports {
-    internal = local.gaia_port
-    external = local.gaia_port
+    internal = var.gaia_port
+    external = var.gaia_port
   }
   env = [
     "GAIA_MONGODB_URI=mongodb://${local.mongodb_endpoint}/gaia",
     "GAIA_EXTERNAL_URL=http://172.17.0.1:8080",
-    "GAIA_RUNNER_API_PASSWORD=${local.gaia_api_password}"
+    "GAIA_RUNNER_API_PASSWORD=${var.gaia_api_password}"
   ]
   networks_advanced {
     name = "gaia"
@@ -76,19 +63,19 @@ resource "docker_container" "gaia" {
 }
 
 resource "docker_container" "runner" {
-  image    = "gaiaapp/runner:${local.gaia_version}"
-  name     = local.runner_name
-  hostname = local.runner_name
+  image    = "gaiaapp/runner:${var.gaia_version}"
+  name     = var.runner_name
+  hostname = var.runner_name
   depends_on = [
     docker_container.ngrok
   ]
-  volumes { 
-    host_path = "/var/run/docker.sock"
+  volumes {
+    host_path      = "/var/run/docker.sock"
     container_path = "/var/run/docker.sock"
   }
   env = [
     "GAIA_URL=http://${local.gaia_endpoint}",
-    "GAIA_RUNNER_API_PASSWORD=${local.gaia_api_password}"
+    "GAIA_RUNNER_API_PASSWORD=${var.gaia_api_password}"
   ]
   networks_advanced {
     name = "gaia"
