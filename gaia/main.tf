@@ -22,7 +22,7 @@ resource "docker_network" "gaia" {
 }
 
 resource "docker_container" "ngrok" {
-  image    = "mongo:4.4"
+  image    = "wernight/ngrok:latest"
   name     = local.ngrok_name
   hostname = local.ngrok_name
   ports {
@@ -66,7 +66,7 @@ resource "docker_container" "gaia" {
     external = local.gaia_port
   }
   env = [
-    "GAIA_MONGODB_URI=mongodb://mongo/gaia",
+    "GAIA_MONGODB_URI=mongodb://${local.mongodb_endpoint}/gaia",
     "GAIA_EXTERNAL_URL=http://172.17.0.1:8080",
     "GAIA_RUNNER_API_PASSWORD=${local.gaia_api_password}"
   ]
